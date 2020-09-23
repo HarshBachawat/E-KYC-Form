@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1 class="text-center">Auto Form Filling Using KYC</h1>
+<br>
+</br>
+    <div class="container">
+        <div class="row">
+            <div class="col-sm-3"></div>
+            <div class="col-sm-6" id="content" style="font-size: 20px;">
+            	{% if status==1 %}
+            	You have already successfully completed the KYC
+            	{% else %}
+            	<form method ="POST" enctype="multipart/form-data" id="doc_details">
+            	    <div class="form-group">
+            	        <label for="sel_pan">Insert PAN Image :</label>
+            	        <input type="file" class="form-control" accept=".jpg,.png,.jpeg" name="sel_pan" id="sel_pan">
+            	        <br>
+            	        <div >
+            	        	<img id="doc_pan" src="#" alt="your image" style="display: none; max-width: 100%; height: auto;"/>
+            	        </div>
+            	        
+            	    </div>
+            	    <br><br>
+            	    <div class="form-group">
+            	    	<label for="sel_aadhar1">Insert Aadhar Card Front Image :</label>
+            	        <input type="file" class="form-control" accept=".jpg,.png,.jpeg" name="sel_aadhar1" id="sel_aadhar1">
+            	        <br>
+            	        <div>
+            	        	<img id="doc_aadhar1" src="#" alt="your image" style="display: none; max-width: 100%; height: auto;"/>
+            	        </div>
+            	        <br>
+            	        <label for="sel_aadhar2">Insert Aadhar Card Back Image :</label>
+            	        <input type="file" class="form-control" accept=".jpg,.png,.jpeg" name="sel_aadhar2" id="sel_aadhar2">
+            	        <br>
+            	        <div>
+            	        	<img id="doc_aadhar2" src="#" alt="your image" style="display: none; max-width: 100%; height: auto;"/>
+            	        </div>
+            	        
+            	    </div>
+            	    <div class="alert alert-info" role="alert" id="note" style="display: none;">
+            	        <b>Note -</b> Crop the document as close as to the edges as possible to improve accuracy
+            	    </div>
+            	    <br>
+            	    <button type="submit" class="btn btn-primary" name="submit">Submit</button>
+            	</form>
+            	{% endif %}
+            </div>
+
+        </div>
+    </div>
+{% endblock %}
+
+{% block js_css %}
+<link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='cropperjs/dist/cropper.css') }}">
+<script type="text/javascript" src="{{ url_for('static',filename='cropperjs/dist/cropper.js') }}"></script>
+<script type="text/javascript" src="{{ url_for('static',filename='sweetalert2/dist/sweetalert2.all.js') }}"></script>
+
+{% endblock %}
+
+{% block after_body %}
+<script type="text/javascript">
+{% if status==0 %}
+	const documents = ['doc_pan','doc_aadhar1','doc_aadhar2'];
+	var details
+	$(document).ready(function(e){
+		$('#doc_details').on('submit',function(e){
+			e.preventDefault();
+			images = []
+			for (var i = 0; i < documents.length; i++) {
+				images[i] = document.getElementById(documents[i]);
+				images[i] = images[i].cropper.getCroppedCanvas({maxWidth: 4096, maxHeight: 4096, imageSmoothingEnabled: false,
+																imageSmoothingQuality: 'high',fillColor: '#fff'});
+			}
+			if (images[0] && images[1] && images[2]) {
+				images[0].toBlob(function(blob_pan) {
+					images[1].toBlob(function(blob_aadhar1) {
+						images[2].toBlob(function(blob_aadhar2) {
+							var fd = new FormData();
+							fd.append('pan_img',blob_pan);
+							fd.append('aadhar1_img',blob_aadhar1);
+							fd.append('aadhar2_img',blob_aadhar2);
+							$('#content').html(`<div class="spinner-grow text-warning" style="width: 6rem; height: 6rem;" role="status">
+							  <span class="sr-only">Loading...</span>
+							</div>`)
+							$.ajax({
+							    type: "POST",
+							    url: "/upload",
+							    data: fd,
+							    cache: false,
+							    contentType: false,
+							    processData: false,
+							    success:function(data){
+							        if (data.status) {
+							         console.log("success");
+							         Swal.fire('Details Extracted Successfully',
+							         	'Your details were successfully extracted from the submitted documents',
+							         	'success')
+							         console.log(data);
+							         $('#content').html(`First Name: ${data.fname}<br>Last Name: ${data.lname}<br>Father's Name: ${data.father_name}<br>Gender: ${data.gender}<br>Date of Birth: ${data.dob}<br>Aadhar No.: ${data.aadhar_no}<br>PAN No.: ${data.pan_no}<br>City/Post Ofice: ${data.city}<br>State/U.T: ${data.state}<br>Pincode: ${data.pincode}<br><br><button id="fill_form" class="btn btn-dark" onclick="fill_form()">Fill Form</button>`)
+							         details = data
+							        }
+							        else {
+							            console.log('failed')
+							            Swal.fire('An Error Occured',
+							            	data.error,
+							            	'error')
+							            $('#content').html(`${data.error}. Please Try Again.`)
+							        }
+							        
+							    },
+							    error: function(data){
+							        console.log("error");
+							        console.log(data);
+							    }
+							});
+						}, 'image/jpeg',1)
+					}, 'image/jpeg',1)
+				}, 'image/jpeg',1)
+			}
+			else
+				alert('Please Upload All Documents')
+		})
+
+	});
+
+	function fill_form() {
+		$('#content').html(`<div class="spinner-grow text-warning" style="width: 6rem; height: 6rem;" role="status">
+						  <span class="sr-only">Loading...</span></div>`)
+		$.ajax({
+			type: "POST",
+			url: "/fill_form",
+			dataType : "json",
+			contentType: "application/json; charset=utf-8",
+			data : JSON.stringify(details),
+			cache: false,
+			success: function(data){
+				console.log(data);
+				if (data.status) {
+					Swal.fire(
+						'E-KYC Completed',
+						data.msg,
+						'success')
+					$('#content').html(data.msg)
+				}
+				else {
+					Swal.fire('Form Not Filled',
+						data.msg,
+						'error')
+					$('#content').html(`Form Filling Unsuccessful. ${data.msg}. Please Try Again<br><br><button id="fill_form" class="btn btn-dark" onclick="fill_form()">Fill Form</button>`)
+				}
+			}
+		});
+	}
+
+	function readURL(input,target_id) {
+	  if (input.files && input.files[0]) {
+
+	    var img = $('#'+target_id)
+	    if(img.css('display') == "none") {
+	        img.show()
+	    }
+
+	    var note = $('#note')
+	    if(note.css('display') == "none") {
+	        note.show()
+	    }
+
+	    var reader = new FileReader();
+	    
+	    reader.onload = function(e) {
+	        im = document.getElementById(target_id)
+	        im.cropper.replace(e.target.result)
+	        //img.cropper('replace',e.target.result);
+	    }
+	    
+	    reader.readAsDataURL(input.files[0]);
+	  }
+	}
+
+	$("#sel_pan").change(function() {
+	  readURL(this,'doc_pan');
+	});
+
+	$("#sel_aadhar1").change(function() {
+	  readURL(this,'doc_aadhar1');
+	});
+
+	$("#sel_aadhar2").change(function() {
+	  readURL(this,'doc_aadhar2');
+	});
+
+	
+	var images = []
+	var croppers = []
+	for (var i = 0; i < documents.length; i++) {
+		images.push(document.getElementById(documents[i]));
+		croppers.push(new Cropper(images[i], {
+		  viewMode: 2,
+		  // crop(event) {
+		  //   console.log(event.detail.x);
+		  //   console.log(event.detail.y);
+		  //   console.log(event.detail.width);
+		  //   console.log(event.detail.height);
+		  //   console.log(event.detail.rotate);
+		  //   console.log(event.detail.scaleX);
+		  //   console.log(event.detail.scaleY);
+		  // },
+		}));
+	}
+	
+
+{% endif %}
+</script>
+{% endblock %}
